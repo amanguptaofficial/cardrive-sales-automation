@@ -155,6 +155,13 @@ cd AI-lead-Generation
    
    All passwords: `password123`
 
+5. **Seed dummy leads (optional, for testing):**
+   ```bash
+   npm run seed:leads
+   ```
+   
+   This creates 50 dummy leads with various statuses, tiers, and sources for a better live view of the dashboard.
+
 ### Step 3: Frontend Setup
 
 1. **Navigate to frontend directory:**
