@@ -310,63 +310,132 @@ export const getAgentPerformance = asyncHandler(async (req, res) => {
 
 export const getPersonalDashboard = asyncHandler(async (req, res) => {
   const agentId = req.agent._id;
-  const { period = 'month', startDate, endDate } = req.query;
+  const { period = 'week', startDate, endDate } = req.query;
+  
+  console.log(`[Personal Dashboard] Request from agent: ${req.agent.name} (${agentId})`);
+  console.log(`[Personal Dashboard] Agent ID type: ${typeof agentId}, value: ${agentId}`);
   
   let start, end;
   if (startDate && endDate) {
     start = new Date(startDate);
     end = new Date(endDate);
-    end.setHours(23, 59, 59, 999); // Include full end date
+    end.setHours(23, 59, 59, 999);
+    start.setHours(0, 0, 0, 0);
   } else {
     end = new Date();
     end.setHours(23, 59, 59, 999);
     start = new Date();
     start.setHours(0, 0, 0, 0);
     if (period === 'week') {
-      start.setDate(start.getDate() - 7);
+      // Last 7 days: go back 6 days to get 7 days total (including today)
+      start.setDate(start.getDate() - 6);
     } else if (period === 'month') {
-      start.setMonth(start.getMonth() - 1);
+      // Last 30 days: go back 29 days to get 30 days total (including today)
+      start.setDate(start.getDate() - 29);
     }
   }
 
-  const totalLeads = await Lead.countDocuments({
-    assignedTo: agentId,
-    $or: [
-      { createdAt: { $gte: start, $lte: end } },
-      { updatedAt: { $gte: start, $lte: end }, assignedTo: agentId }
-    ]
-  });
+  // Debug: Check total leads in database
+  const totalLeadsInDB = await Lead.countDocuments({});
+  console.log(`[Personal Dashboard] Total leads in database: ${totalLeadsInDB}`);
+  
+  // Debug: Check leads with any assignment
+  const leadsWithAssignment = await Lead.countDocuments({ assignedTo: { $exists: true, $ne: null } });
+  console.log(`[Personal Dashboard] Leads with any assignment: ${leadsWithAssignment}`);
+  
+  // Debug: Check leads assigned to this specific agent
+  const leadsForThisAgent = await Lead.countDocuments({ assignedTo: agentId });
+  console.log(`[Personal Dashboard] Leads assigned to this agent: ${leadsForThisAgent}`);
 
+  // Get all leads assigned to agent - we'll count activity in period
   const allLeads = await Lead.find({
-    assignedTo: agentId,
-    $or: [
-      { createdAt: { $gte: start, $lte: end } },
-      { updatedAt: { $gte: start, $lte: end }, assignedTo: agentId }
-    ]
-  }).select('messages createdAt updatedAt').populate('messages.sentBy', '_id');
+    assignedTo: agentId
+  }).select('messages createdAt updatedAt lastActivity status').populate('messages.sentBy', '_id');
+
+  console.log(`[Personal Dashboard] Found ${allLeads.length} total leads assigned to agent ${agentId}`);
+  console.log(`[Personal Dashboard] Period: ${start.toISOString()} to ${end.toISOString()}`);
+  
+  // Debug: Show sample lead IDs if any
+  if (allLeads.length > 0) {
+    console.log(`[Personal Dashboard] Sample lead IDs: ${allLeads.slice(0, 3).map(l => l._id).join(', ')}`);
+  }
+
+  // Count leads that have activity in the period (created, updated, or had messages)
+  const leadsInPeriod = allLeads.filter(lead => {
+    const leadStart = new Date(lead.createdAt);
+    const leadUpdated = new Date(lead.updatedAt);
+    const leadActivity = lead.lastActivity ? new Date(lead.lastActivity) : leadUpdated;
+    
+    // Check if lead was created in period
+    if (leadStart >= start && leadStart <= end) {
+      return true;
+    }
+    
+    // Check if lead was updated in period (might indicate assignment or status change)
+    if (leadUpdated >= start && leadUpdated <= end) {
+      return true;
+    }
+    
+    // Check if lead had activity in period
+    if (leadActivity >= start && leadActivity <= end) {
+      return true;
+    }
+    
+    // Check if lead has any messages in the period
+    if (lead.messages && lead.messages.length > 0) {
+      const hasMessageInPeriod = lead.messages.some(m => {
+        if (m.sentAt) {
+          const sentAt = new Date(m.sentAt);
+          return sentAt >= start && sentAt <= end;
+        }
+        return false;
+      });
+      if (hasMessageInPeriod) return true;
+    }
+    
+    return false;
+  });
+  
+  const totalLeads = leadsInPeriod.length;
+  console.log(`[Personal Dashboard] ${totalLeads} leads have activity in period`);
 
   let totalResponseTime = 0;
   let responseCount = 0;
   
+  // Count responses made by agent in the period
   for (const lead of allLeads) {
     if (!lead.messages || lead.messages.length === 0) continue;
     
-    const firstOutbound = lead.messages.find(m => {
+    // Find outbound messages by this agent within the period
+    const outboundMessages = lead.messages.filter(m => {
       if (m.direction !== 'outbound') return false;
       if (!m.sentBy) return false;
       const sentById = typeof m.sentBy === 'object' ? m.sentBy._id?.toString() : m.sentBy.toString();
-      return sentById === agentId.toString();
+      if (sentById !== agentId.toString()) return false;
+      // Check if message was sent in the period
+      if (m.sentAt) {
+        const sentAt = new Date(m.sentAt);
+        return sentAt >= start && sentAt <= end;
+      }
+      return false;
     });
     
-    if (firstOutbound && firstOutbound.sentAt && lead.createdAt) {
-      try {
-        const responseTime = (new Date(firstOutbound.sentAt) - new Date(lead.createdAt)) / 1000;
-        if (responseTime > 0 && responseTime < 86400) {
-          totalResponseTime += responseTime;
-          responseCount++;
+    if (outboundMessages.length > 0) {
+      // Use the first outbound message in the period for response time calculation
+      const firstOutbound = outboundMessages.sort((a, b) => 
+        new Date(a.sentAt) - new Date(b.sentAt)
+      )[0];
+      
+      if (firstOutbound.sentAt && lead.createdAt) {
+        try {
+          const responseTime = (new Date(firstOutbound.sentAt) - new Date(lead.createdAt)) / 1000;
+          if (responseTime > 0 && responseTime < 86400) {
+            totalResponseTime += responseTime;
+            responseCount++;
+          }
+        } catch (error) {
+          console.error('Error calculating response time:', error);
         }
-      } catch (error) {
-        console.error('Error calculating response time:', error);
       }
     }
   }
@@ -374,14 +443,12 @@ export const getPersonalDashboard = asyncHandler(async (req, res) => {
   const avgResponseTime = responseCount > 0 ? Math.round(totalResponseTime / responseCount) : 0;
   const responseRate = totalLeads > 0 ? (responseCount / totalLeads) * 100 : 0;
 
+  // Find leads converted in the period
   const convertedLeads = await Lead.find({
     assignedTo: agentId,
     status: LeadStatus.CONVERTED,
-    $or: [
-      { updatedAt: { $gte: start, $lte: end } },
-      { createdAt: { $gte: start, $lte: end }, status: LeadStatus.CONVERTED }
-    ]
-  }).select('interest updatedAt');
+    updatedAt: { $gte: start, $lte: end }
+  }).select('interest updatedAt createdAt');
 
   const revenue = convertedLeads.reduce((sum, lead) => {
     return sum + (lead.interest?.budget?.max || lead.interest?.budget?.min || 0);
@@ -432,17 +499,15 @@ export const getPersonalDashboard = asyncHandler(async (req, res) => {
       assignedTo: agentId,
       $or: [
         { createdAt: { $gte: date, $lt: nextDate } },
-        { updatedAt: { $gte: date, $lt: nextDate }, assignedTo: agentId }
+        { updatedAt: { $gte: date, $lt: nextDate } },
+        { lastActivity: { $gte: date, $lt: nextDate } }
       ]
     });
 
     const converted = await Lead.countDocuments({
       assignedTo: agentId,
       status: LeadStatus.CONVERTED,
-      $or: [
-        { updatedAt: { $gte: date, $lt: nextDate } },
-        { createdAt: { $gte: date, $lt: nextDate }, status: LeadStatus.CONVERTED }
-      ]
+      updatedAt: { $gte: date, $lt: nextDate }
     });
 
     weeklyStats.push({
@@ -453,17 +518,53 @@ export const getPersonalDashboard = asyncHandler(async (req, res) => {
   }
 
   let allTimeStats = null;
-  if (totalLeads === 0) {
-    const allTimeLeads = await Lead.countDocuments({ assignedTo: agentId });
-    const allTimeConverted = await Lead.countDocuments({
-      assignedTo: agentId,
-      status: LeadStatus.CONVERTED
+  const allTimeLeads = await Lead.countDocuments({ assignedTo: agentId });
+  const allTimeConverted = await Lead.countDocuments({
+    assignedTo: agentId,
+    status: LeadStatus.CONVERTED
+  });
+  
+  // Count leads where agent actually responded (sent outbound message)
+  const allTimeLeadsWithMessages = await Lead.find({
+    assignedTo: agentId,
+    'messages.direction': 'outbound',
+    'messages.sentBy': agentId
+  }).select('_id');
+  const allTimeResponded = new Set(allTimeLeadsWithMessages.map(l => l._id.toString())).size;
+  
+  allTimeStats = {
+    totalLeads: allTimeLeads,
+    convertedLeads: allTimeConverted,
+    respondedLeads: allTimeResponded,
+    conversionRate: allTimeLeads > 0 ? (allTimeConverted / allTimeLeads) * 100 : 0,
+    responseRate: allTimeLeads > 0 ? (allTimeResponded / allTimeLeads) * 100 : 0
+  };
+  
+  if (totalLeads === 0 && allTimeLeads === 0) {
+    return res.json({
+      success: true,
+      data: {
+        totalLeads: 0,
+        respondedLeads: 0,
+        responseRate: 0,
+        avgResponseTime: 0,
+        convertedLeads: 0,
+        conversionRate: 0,
+        revenue: 0,
+        teamAvgConversion: 0,
+        weeklyStats: Array.from({ length: 7 }, (_, i) => {
+          const date = new Date();
+          date.setDate(date.getDate() - (6 - i));
+          return {
+            date: date.toISOString().split('T')[0],
+            leads: 0,
+            converted: 0
+          };
+        }),
+        allTimeStats,
+        period: { start, end }
+      }
     });
-    allTimeStats = {
-      totalLeads: allTimeLeads,
-      convertedLeads: allTimeConverted,
-      conversionRate: allTimeLeads > 0 ? (allTimeConverted / allTimeLeads) * 100 : 0
-    };
   }
 
   console.log(`[Personal Dashboard] Agent: ${req.agent.name} (${agentId}), Period: ${period}, Total Leads: ${totalLeads}, Responded: ${responseCount}, Converted: ${convertedLeads.length}`);

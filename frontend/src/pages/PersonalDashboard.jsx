@@ -60,7 +60,16 @@ const PersonalDashboard = () => {
     allTimeStats: null
   };
 
-  const hasNoPeriodData = dashboardData.totalLeads === 0 && dashboardData.allTimeStats;
+  const hasNoPeriodData = dashboardData.totalLeads === 0 && dashboardData.allTimeStats && dashboardData.allTimeStats.totalLeads > 0;
+  
+  const displayData = hasNoPeriodData && dashboardData.allTimeStats ? {
+    ...dashboardData,
+    totalLeads: dashboardData.allTimeStats.totalLeads || 0,
+    respondedLeads: dashboardData.allTimeStats.respondedLeads || 0,
+    responseRate: dashboardData.allTimeStats.responseRate || 0,
+    convertedLeads: dashboardData.allTimeStats.convertedLeads || 0,
+    conversionRate: dashboardData.allTimeStats.conversionRate || 0
+  } : dashboardData;
 
   const chartData = dashboardData.weeklyStats && dashboardData.weeklyStats.length > 0 
     ? dashboardData.weeklyStats 
@@ -86,7 +95,12 @@ const PersonalDashboard = () => {
             <p className="text-gray-600 mt-1">Track your performance metrics and goals</p>
             {hasNoPeriodData && (
               <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-2 text-sm text-blue-700">
-                <p>No activity in selected period. All-time stats: {dashboardData.allTimeStats.totalLeads} leads, {dashboardData.allTimeStats.convertedLeads} converted ({dashboardData.allTimeStats.conversionRate.toFixed(1)}%)</p>
+                <p>No activity in selected period. Showing all-time stats: {dashboardData.allTimeStats.totalLeads} leads, {dashboardData.allTimeStats.convertedLeads} converted ({dashboardData.allTimeStats.conversionRate.toFixed(1)}%)</p>
+              </div>
+            )}
+            {!hasNoPeriodData && dashboardData.allTimeStats && dashboardData.allTimeStats.totalLeads === 0 && (
+              <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded-lg p-2 text-sm text-yellow-700">
+                <p>No leads assigned yet. Assign leads to see your performance metrics.</p>
               </div>
             )}
           </div>
@@ -108,7 +122,7 @@ const PersonalDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Leads</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{dashboardData.totalLeads || 0}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{displayData.totalLeads || 0}</p>
               </div>
               <Users className="w-8 h-8 text-blue-600" />
             </div>
@@ -119,10 +133,10 @@ const PersonalDashboard = () => {
               <div>
                 <p className="text-sm text-gray-600">Response Rate</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {dashboardData.responseRate?.toFixed(1) || 0}%
+                  {displayData.responseRate?.toFixed(1) || 0}%
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {dashboardData.respondedLeads || 0} responded
+                  {displayData.respondedLeads || 0} responded
                 </p>
               </div>
               <MessageCircle className="w-8 h-8 text-green-600" />
@@ -134,10 +148,10 @@ const PersonalDashboard = () => {
               <div>
                 <p className="text-sm text-gray-600">Conversion Rate</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {dashboardData.conversionRate?.toFixed(1) || 0}%
+                  {displayData.conversionRate?.toFixed(1) || 0}%
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Team avg: {dashboardData.teamAvgConversion?.toFixed(1) || 0}%
+                  Team avg: {displayData.teamAvgConversion?.toFixed(1) || 0}%
                 </p>
               </div>
               <TrendingUp className="w-8 h-8 text-purple-600" />
@@ -149,10 +163,10 @@ const PersonalDashboard = () => {
               <div>
                 <p className="text-sm text-gray-600">Revenue Generated</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                  ₹{((dashboardData.revenue || 0) / 100000).toFixed(1)}L
+                  ₹{((displayData.revenue || 0) / 100000).toFixed(1)}L
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {dashboardData.convertedLeads || 0} conversions
+                  {displayData.convertedLeads || 0} conversions
                 </p>
               </div>
               <DollarSign className="w-8 h-8 text-green-600" />
@@ -169,10 +183,10 @@ const PersonalDashboard = () => {
             </h3>
             <div className="text-center py-8">
               <p className="text-4xl font-bold text-gray-900">
-                {dashboardData.avgResponseTime ? `${Math.round(dashboardData.avgResponseTime / 60)}m` : 'N/A'}
+                {displayData.avgResponseTime ? `${Math.round(displayData.avgResponseTime / 60)}m` : 'N/A'}
               </p>
               <p className="text-sm text-gray-600 mt-2">
-                {dashboardData.respondedLeads || 0} leads responded
+                {displayData.respondedLeads || 0} leads responded
               </p>
             </div>
           </div>
@@ -186,28 +200,28 @@ const PersonalDashboard = () => {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-gray-600">Your Conversion Rate</span>
-                  <span className="font-semibold">{dashboardData.conversionRate?.toFixed(1) || 0}%</span>
+                  <span className="font-semibold">{displayData.conversionRate?.toFixed(1) || 0}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
                     className="bg-accent h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(dashboardData.conversionRate || 0, 100)}%` }}
+                    style={{ width: `${Math.min(displayData.conversionRate || 0, 100)}%` }}
                   ></div>
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-gray-600">Team Average</span>
-                  <span className="font-semibold">{dashboardData.teamAvgConversion?.toFixed(1) || 0}%</span>
+                  <span className="font-semibold">{displayData.teamAvgConversion?.toFixed(1) || 0}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
                     className="bg-gray-400 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(dashboardData.teamAvgConversion || 0, 100)}%` }}
+                    style={{ width: `${Math.min(displayData.teamAvgConversion || 0, 100)}%` }}
                   ></div>
                 </div>
               </div>
-              {dashboardData.conversionRate > dashboardData.teamAvgConversion && (
+              {displayData.conversionRate > displayData.teamAvgConversion && (
                 <div className="flex items-center gap-2 text-green-600 text-sm">
                   <TrendingUp className="w-4 h-4" />
                   You're performing above team average!
@@ -259,7 +273,7 @@ const PersonalDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-blue-700 font-medium">Leads Assigned</p>
-                <p className="text-3xl font-bold text-blue-900 mt-2">{dashboardData.totalLeads || 0}</p>
+                <p className="text-3xl font-bold text-blue-900 mt-2">{displayData.totalLeads || 0}</p>
               </div>
               <Users className="w-10 h-10 text-blue-600" />
             </div>
@@ -269,9 +283,9 @@ const PersonalDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-green-700 font-medium">Conversions</p>
-                <p className="text-3xl font-bold text-green-900 mt-2">{dashboardData.convertedLeads || 0}</p>
+                <p className="text-3xl font-bold text-green-900 mt-2">{displayData.convertedLeads || 0}</p>
                 <p className="text-xs text-green-600 mt-1">
-                  {dashboardData.conversionRate?.toFixed(1) || 0}% conversion rate
+                  {displayData.conversionRate?.toFixed(1) || 0}% conversion rate
                 </p>
               </div>
               <Award className="w-10 h-10 text-green-600" />
@@ -283,10 +297,10 @@ const PersonalDashboard = () => {
               <div>
                 <p className="text-sm text-purple-700 font-medium">Total Revenue</p>
                 <p className="text-3xl font-bold text-purple-900 mt-2">
-                  ₹{((dashboardData.revenue || 0) / 100000).toFixed(1)}L
+                  ₹{((displayData.revenue || 0) / 100000).toFixed(1)}L
                 </p>
                 <p className="text-xs text-purple-600 mt-1">
-                  From {dashboardData.convertedLeads || 0} deals
+                  From {displayData.convertedLeads || 0} deals
                 </p>
               </div>
               <DollarSign className="w-10 h-10 text-purple-600" />

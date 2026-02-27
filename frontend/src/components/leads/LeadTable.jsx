@@ -4,11 +4,11 @@ import { useLeads, useBulkUpdate } from '../../hooks/useLeads.js';
 import { useAgents } from '../../hooks/useChat.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { getTierColor, getStatusColor, formatTimeAgo, LeadSource, LeadStatus, LeadTier } from '../../utils/constants.js';
-import { Sparkles, Globe, Car, Truck, MessageCircle, Mail, Smartphone, Flame, Filter, X, CheckSquare, Square, UserPlus, Tag, Trash2, Download, Loader2 } from 'lucide-react';
+import { Sparkles, Globe, Car, Truck, MessageCircle, Mail, Smartphone, Flame, Filter, X, CheckSquare, Square, UserPlus, Tag, Trash2, Download, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ConfirmationModal from '../common/ConfirmationModal.jsx';
 
-const LeadTable = ({ onLeadClick }) => {
+const LeadTable = ({ onLeadClick, isCompact = false }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { agent } = useAuth();
@@ -26,6 +26,9 @@ const LeadTable = ({ onLeadClick }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [showAll, setShowAll] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   
   const bulkUpdateMutation = useBulkUpdate();
   const { data: agentsData } = useAgents();
@@ -34,14 +37,24 @@ const LeadTable = ({ onLeadClick }) => {
 
   useEffect(() => {
     const search = searchParams.get('search');
+    const page = searchParams.get('page');
     if (search) {
       setFilters(prev => ({ ...prev, search }));
     }
+    if (page) {
+      setCurrentPage(parseInt(page));
+    }
   }, [searchParams]);
 
+  useEffect(() => {
+    if (!isCompact) {
+      setCurrentPage(1);
+    }
+  }, [filters.tier, filters.status, filters.source, filters.search, isCompact]);
+
   const queryParams = {
-    limit: 50,
-    page: 1
+    limit: isCompact ? 50 : pageSize,
+    page: isCompact ? 1 : currentPage
   };
 
   if (filters.tier) queryParams.tier = filters.tier;
@@ -187,7 +200,11 @@ const LeadTable = ({ onLeadClick }) => {
     );
   }
 
-  const leads = data?.data || [];
+  const allLeads = data?.data || [];
+  const leads = isCompact && !showAll ? allLeads.slice(0, 8) : allLeads;
+  const pagination = data?.pagination || {};
+  const totalPages = pagination.pages || 1;
+  const totalLeads = pagination.total || 0;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200">
@@ -214,12 +231,21 @@ const LeadTable = ({ onLeadClick }) => {
               </span>
             )}
           </button>
-          <button
-            onClick={() => navigate('/leads')}
-            className="text-sm text-accent hover:text-accent/80 font-medium"
-          >
-            View All →
-          </button>
+          {isCompact ? (
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="text-sm text-accent hover:text-accent/80 font-medium"
+            >
+              {showAll ? 'Show Less' : `View All (${allLeads.length}) →`}
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate('/leads')}
+              className="text-sm text-accent hover:text-accent/80 font-medium"
+            >
+              View All →
+            </button>
+          )}
         </div>
       </div>
 
@@ -450,6 +476,85 @@ const LeadTable = ({ onLeadClick }) => {
           </tbody>
         </table>
       </div>
+
+      {!isCompact && totalPages > 1 && (
+        <div className="p-4 border-t border-gray-200 flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span>
+              Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalLeads)} of {totalLeads} leads
+            </span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(parseInt(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="ml-4 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            >
+              <option value={10}>10 per page</option>
+              <option value={20}>20 per page</option>
+              <option value={50}>50 per page</option>
+              <option value={100}>100 per page</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const newPage = Math.max(1, currentPage - 1);
+                setCurrentPage(newPage);
+                navigate(`/leads?page=${newPage}${filters.search ? `&search=${filters.search}` : ''}`);
+              }}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => {
+                      setCurrentPage(pageNum);
+                      navigate(`/leads?page=${pageNum}${filters.search ? `&search=${filters.search}` : ''}`);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                      currentPage === pageNum
+                        ? 'bg-accent text-white'
+                        : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => {
+                const newPage = Math.min(totalPages, currentPage + 1);
+                setCurrentPage(newPage);
+                navigate(`/leads?page=${newPage}${filters.search ? `&search=${filters.search}` : ''}`);
+              }}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Bulk Assign Modal */}
       {showAssignModal && (

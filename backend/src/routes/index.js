@@ -13,6 +13,7 @@ import integrationRoutes from './integration.routes.js';
 import reminderRoutes from './reminder.routes.js';
 import templateRoutes from './template.routes.js';
 import analyticsRoutes from './analytics.routes.js';
+import vehicleRoutes from './vehicle.routes.js';
 
 const router = express.Router();
 
@@ -30,5 +31,6 @@ router.use('/integrations', integrationRoutes);
 router.use('/reminders', reminderRoutes);
 router.use('/templates', templateRoutes);
 router.use('/analytics', analyticsRoutes);
+router.use('/vehicles', vehicleRoutes);
 
 export default router;

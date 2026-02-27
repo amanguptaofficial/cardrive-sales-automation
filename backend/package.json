@@ -6,7 +6,8 @@
     "dev": "node --watch server.js",
     "start": "node server.js",
     "seed": "node src/scripts/seed.js",
-    "seed:leads": "node src/scripts/seed-dummy-leads.js"
+    "seed:leads": "node src/scripts/seed-dummy-leads.js",
+    "assign:leads": "node src/scripts/assign-leads-to-agent.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.490.0",
