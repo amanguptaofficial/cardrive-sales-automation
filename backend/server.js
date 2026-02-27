@@ -18,18 +18,29 @@ const server = createServer(app);
 
 initializeSocket(server);
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://cardrive-ai-automation.netlify.app',
+  env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: env.FRONTEND_URL,
-  credentials: true
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
-
-app.use(cors({
-  origin: "*"
-}));
 
 app.use('/api/v1', apiRoutes);
 

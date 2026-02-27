@@ -5,10 +5,24 @@ let io = null;
 import { env } from './config/env.js';
 
 export const initializeSocket = (server) => {
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://cardrive-ai-automation.netlify.app',
+    env.FRONTEND_URL
+  ].filter(Boolean);
+
   io = new Server(server, {
     cors: {
-      origin: env.FRONTEND_URL,
-      methods: ['GET', 'POST']
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      methods: ['GET', 'POST'],
+      credentials: true
     }
   });
 
