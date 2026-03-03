@@ -407,7 +407,11 @@ const LeadTable = ({ onLeadClick, isCompact = false }) => {
                   <tr
                     key={leadId}
                     onClick={(e) => {
-                      if (isAdmin && e.target.type !== 'checkbox') {
+                      // Allow clicking on row to view details, but not when clicking checkbox or other interactive elements
+                      if (e.target.type !== 'checkbox' && 
+                          e.target.tagName !== 'BUTTON' && 
+                          !e.target.closest('button') &&
+                          !e.target.closest('a')) {
                         onLeadClick?.(lead);
                       }
                     }}
@@ -571,11 +575,26 @@ const LeadTable = ({ onLeadClick, isCompact = false }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
               >
                 <option value="">Choose an agent...</option>
-                {agents.map(agent => (
-                  <option key={agent._id || agent.id} value={agent._id || agent.id}>
-                    {agent.name} ({agent.email})
-                  </option>
-                ))}
+                {/* Senior Agents First */}
+                <optgroup label="👔 Senior Agents & Managers">
+                  {agents
+                    .filter(a => a.role === 'senior_agent' || a.role === 'manager' || a.role === 'owner')
+                    .map(agent => (
+                      <option key={agent._id || agent.id} value={agent._id || agent.id}>
+                        {agent.name} ({agent.email}) - {agent.role === 'senior_agent' ? 'Senior Agent' : agent.role === 'manager' ? 'Manager' : 'Owner'}
+                      </option>
+                    ))}
+                </optgroup>
+                {/* Regular Agents */}
+                <optgroup label="👤 Agents">
+                  {agents
+                    .filter(a => a.role === 'agent' || (!a.role))
+                    .map(agent => (
+                      <option key={agent._id || agent.id} value={agent._id || agent.id}>
+                        {agent.name} ({agent.email})
+                      </option>
+                    ))}
+                </optgroup>
               </select>
             </div>
             <div className="flex gap-2 justify-end">

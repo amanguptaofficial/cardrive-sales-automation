@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { X, Mail, Phone, MapPin, Car, DollarSign, Calendar, User, MessageSquare, TrendingUp, Tag, FileText, CheckCircle, Clock, Plus, Edit, Trash2, Zap, Loader2, CheckCircle2, XCircle, Calendar as CalendarIcon } from 'lucide-react';
+import { X, Mail, Phone, MapPin, Car, DollarSign, Calendar, User, MessageSquare, TrendingUp, Tag, FileText, CheckCircle, Clock, Plus, Edit, Trash2, Zap, Loader2, CheckCircle2, XCircle, Calendar as CalendarIcon, UserPlus } from 'lucide-react';
 import { useLead, useLeadNotes, useAddNote, useUpdateNote, useDeleteNote, useQuickAction } from '../../hooks/useLeads.js';
+import { useAgents } from '../../hooks/useChat.js';
 import { getTierColor, getStatusColor, formatTimeAgo, LeadSource } from '../../utils/constants.js';
 import toast from 'react-hot-toast';
 import ConfirmationModal from '../common/ConfirmationModal.jsx';
@@ -12,6 +13,8 @@ const LeadDetailModal = ({ leadId, onClose }) => {
   const updateNoteMutation = useUpdateNote();
   const deleteNoteMutation = useDeleteNote();
   const quickActionMutation = useQuickAction();
+  const { data: agentsData } = useAgents();
+  const agents = agentsData?.data || [];
   
   const [showAddNote, setShowAddNote] = useState(false);
   const [noteText, setNoteText] = useState('');
@@ -24,6 +27,8 @@ const LeadDetailModal = ({ leadId, onClose }) => {
   const [confirmAction, setConfirmAction] = useState(null);
   const [showDeleteNoteModal, setShowDeleteNoteModal] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState('');
   
   const lead = data?.data;
   const notes = notesData || [];
@@ -98,6 +103,25 @@ const LeadDetailModal = ({ leadId, onClose }) => {
       date: testDriveDate,
       carAssigned: testDriveCar || null
     });
+  };
+
+  const handleAssignLead = async () => {
+    if (!selectedAgent) {
+      toast.error('Please select an agent');
+      return;
+    }
+    try {
+      await quickActionMutation.mutateAsync({ 
+        leadId, 
+        action: 'reassign', 
+        data: { agentId: selectedAgent } 
+      });
+      toast.success('Lead assigned successfully');
+      setShowAssignModal(false);
+      setSelectedAgent('');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to assign lead');
+    }
   };
 
   if (!leadId) return null;
@@ -204,12 +228,27 @@ const LeadDetailModal = ({ leadId, onClose }) => {
                   <Tag className="w-4 h-4" />
                   <span>Source: {lead.source || 'Unknown'}</span>
                 </div>
-                {lead.assignedTo && (
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <User className="w-4 h-4" />
-                    <span>Assigned to: {lead.assignedTo.name || 'Unassigned'}</span>
+                    <span>Assigned to: {lead.assignedTo?.name || 'Unassigned'}</span>
+                    {lead.assignedTo?.role && (
+                      <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                        {lead.assignedTo.role === 'senior_agent' ? 'Senior' : lead.assignedTo.role === 'manager' ? 'Manager' : lead.assignedTo.role === 'owner' ? 'Owner' : 'Agent'}
+                      </span>
+                    )}
                   </div>
-                )}
+                  <button
+                    onClick={() => {
+                      setSelectedAgent(lead.assignedTo?._id || lead.assignedTo?.id || '');
+                      setShowAssignModal(true);
+                    }}
+                    className="text-xs px-3 py-1.5 bg-accent text-white rounded-lg hover:bg-accent/90 flex items-center gap-1"
+                  >
+                    <UserPlus className="w-3 h-3" />
+                    {lead.assignedTo ? 'Reassign' : 'Assign'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -803,6 +842,72 @@ const LeadDetailModal = ({ leadId, onClose }) => {
         type="danger"
         isLoading={deleteNoteMutation.isPending}
       />
+
+      {/* Assign Lead Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold mb-4">Assign Lead to Agent</h2>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Agent
+              </label>
+              <select
+                value={selectedAgent}
+                onChange={(e) => setSelectedAgent(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+              >
+                <option value="">Choose an agent...</option>
+                {/* Senior Agents First */}
+                <optgroup label="👔 Senior Agents & Managers">
+                  {agents
+                    .filter(a => a.role === 'senior_agent' || a.role === 'manager' || a.role === 'owner')
+                    .map(agent => (
+                      <option key={agent._id || agent.id} value={agent._id || agent.id}>
+                        {agent.name} ({agent.email}) - {agent.role === 'senior_agent' ? 'Senior Agent' : agent.role === 'manager' ? 'Manager' : 'Owner'}
+                      </option>
+                    ))}
+                </optgroup>
+                {/* Regular Agents */}
+                <optgroup label="👤 Agents">
+                  {agents
+                    .filter(a => a.role === 'agent' || (!a.role))
+                    .map(agent => (
+                      <option key={agent._id || agent.id} value={agent._id || agent.id}>
+                        {agent.name} ({agent.email})
+                      </option>
+                    ))}
+                </optgroup>
+              </select>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setSelectedAgent('');
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAssignLead}
+                disabled={quickActionMutation.isPending || !selectedAgent}
+                className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 disabled:opacity-50 flex items-center gap-2"
+              >
+                {quickActionMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Assigning...
+                  </>
+                ) : (
+                  'Assign'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
